@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Renovision</title>
+<meta name="theme-color" content="#0b1520" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='none' stroke='%237dd3fc' stroke-width='2' stroke-linejoin='round' d='M16 3 28 10v12L16 29 4 22V10z M16 3v12 M4 10l12 5 12-5 M16 29V15'/%3E%3C/svg%3E" />
+<!--
+  Renovision host / loader page (template for GitHub Pages or Netlify).
+
+  Serves as the background page the Renovision Tampermonkey userscript is
+  @match-ed against. While Tampermonkey loads + parses the ~55 MB offline
+  bundle in the background, an SVG "3D cube" loading indicator plays: three
+  nested wireframe cubes are recursively assembled edge by edge (each edge
+  highlights as it is placed), then recursively disassembled, with a progress
+  bar built into the cube's base line. Once the application's main SVG
+  floorplan viewer becomes visible the loader fades away (scale + blur +
+  opacity) and removes itself.
+
+  Everything is inline (no external requests), so the page works from GitHub
+  Pages, Netlify, or file:// alike. The userscript mounts into #root below.
+-->
+<style>
+  :root {
+    --bg0: #0b1520;
+    --bg1: #0e1d2e;
+    --edge-dim: rgba(148, 163, 184, 0.28);
+    --bar-track: rgba(148, 163, 184, 0.28);
+    --ink: #cbd5e1;
+    --ink-dim: #64748b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(1100px 700px at 50% 38%, var(--bg1), var(--bg0) 70%),
+      var(--bg0);
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+  /* Faint blueprint grid so the page reads as Renovision while loading. */
+  #rnv-grid {
+    position: fixed; inset: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(125, 211, 252, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(125, 211, 252, 0.045) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(900px 600px at 50% 42%, rgba(0,0,0,.9), transparent 75%);
+    -webkit-mask-image: radial-gradient(900px 600px at 50% 42%, rgba(0,0,0,.9), transparent 75%);
+  }
+  #root { position: relative; z-index: 1; min-height: 100%; }
+
+  #rnv-loader {
+    position: fixed; inset: 0; z-index: 2147483000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px;
+    background:
+      radial-gradient(1100px 700px at 50% 38%, var(--bg1), var(--bg0) 70%),
+      var(--bg0);
+  }
+  /* Fade-away once the floorplan viewer is visible: swell, blur, dissolve. */
+  #rnv-loader.rnv-done {
+    opacity: 0;
+    transform: scale(1.14);
+    filter: blur(10px);
+    transition:
+      opacity 0.95s ease,
+      transform 0.95s cubic-bezier(0.16, 1, 0.3, 1),
+      filter 0.95s ease;
+    pointer-events: none;
+  }
+  #rnv-cube { display: block; }
+  #rnv-wordmark {
+    font-size: 15px; font-weight: 600; letter-spacing: 0.35em;
+    text-transform: uppercase; color: var(--ink);
+    text-shadow: 0 0 18px rgba(125, 211, 252, 0.35);
+  }
+  #rnv-status {
+    font-size: 12px; letter-spacing: 0.08em; color: var(--ink-dim);
+    min-height: 1.2em; transition: opacity 0.4s ease;
+  }
+  #rnv-hint {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    max-width: 34em; text-align: center;
+    font-size: 12px; line-height: 1.6; color: var(--ink-dim);
+    opacity: 0; transition: opacity 1.2s ease; pointer-events: none;
+  }
+  #rnv-hint.rnv-show { opacity: 1; pointer-events: auto; }
+  #rnv-hint a { color: #7dd3fc; }
+  @media (prefers-reduced-motion: reduce) {
+    #rnv-loader.rnv-done { transition-duration: 0.2s; transform: none; filter: none; }
+  }
+</style>
+</head>
+<body>
+<div id="rnv-grid" aria-hidden="true"></div>
+<!-- The Renovision userscript mounts here (falls back to its own overlay root). -->
+<div id="root"></div>
+
+<div id="rnv-loader" role="status" aria-label="Loading Renovision">
+  <svg id="rnv-cube" viewBox="0 0 260 250" width="260" height="250" aria-hidden="true">
+    <defs>
+      <filter id="rnv-glow" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur stdDeviation="2.6" result="b" />
+        <feMerge>
+          <feMergeNode in="b" /><feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+      <linearGradient id="rnv-bar-fill" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#38bdf8" />
+        <stop offset="1" stop-color="#818cf8" />
+      </linearGradient>
+    </defs>
+    <g id="rnv-levels"></g>
+    <!-- Loader bar built into the cube frame: the track spans the cube's
+         widest corners below its lowest tip, hung on dashed extension lines —
+         drawn like a blueprint dimension line under the assembly. -->
+    <g id="rnv-bar">
+      <line id="rnv-bar-drop-l" stroke="var(--edge-dim)" stroke-width="1" stroke-dasharray="2 3" />
+      <line id="rnv-bar-drop-r" stroke="var(--edge-dim)" stroke-width="1" stroke-dasharray="2 3" />
+      <line id="rnv-bar-track" stroke="var(--bar-track)" stroke-width="3" stroke-linecap="round" />
+      <line id="rnv-bar-value" stroke="url(#rnv-bar-fill)" stroke-width="3" stroke-linecap="round" filter="url(#rnv-glow)" />
+    </g>
+  </svg>
+  <div id="rnv-wordmark">Renovision</div>
+  <div id="rnv-status">Preparing 3D workspace…</div>
+</div>
+<div id="rnv-hint">
+  Still loading — the offline Renovision bundle (~55&nbsp;MB) is parsed in the background.<br />
+  If nothing appears, make sure the
+  <a href="https://raw.githubusercontent.com/zludanyi/Renovision/main/Renovision_3D_latest.user.js">Renovision&nbsp;3D userscript</a>
+  is installed in Tampermonkey and enabled for this page.
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  var loader = document.getElementById("rnv-loader");
+  var statusEl = document.getElementById("rnv-status");
+  var hintEl = document.getElementById("rnv-hint");
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------------- geometry: nested isometric cubes ---------------- */
+
+  var CX = 130, CY = 112;                 // cube centre in the 260x250 viewBox
+  var LEVELS = [                          // recursive nesting, outer -> inner
+    { s: 46, color: "#7dd3fc" },
+    { s: 26, color: "#93c5fd" },
+    { s: 13, color: "#c4b5fd" },
+  ];
+  // Isometric axes (unit cube corners are x,y,z in {-1,1}).
+  function project(s, x, y, z) {
+    return {
+      x: CX + (x - z) * s * 0.866,
+      y: CY + (x + z) * s * 0.5 - y * s * 1.04,
+    };
+  }
+  // 12 edges in assembly order: base ring, then pillars, then top ring.
+  var EDGE_ORDER = [
+    [[-1,-1,-1],[ 1,-1,-1]], [[ 1,-1,-1],[ 1,-1, 1]],
+    [[ 1,-1, 1],[-1,-1, 1]], [[-1,-1, 1],[-1,-1,-1]],
+    [[-1,-1,-1],[-1, 1,-1]], [[ 1,-1,-1],[ 1, 1,-1]],
+    [[ 1,-1, 1],[ 1, 1, 1]], [[-1,-1, 1],[-1, 1, 1]],
+    [[-1, 1,-1],[ 1, 1,-1]], [[ 1, 1,-1],[ 1, 1, 1]],
+    [[ 1, 1, 1],[-1, 1, 1]], [[-1, 1, 1],[-1, 1,-1]],
+  ];
+
+  var levelsGroup = document.getElementById("rnv-levels");
+  var edges = []; // flat assembly sequence across recursion levels
+  LEVELS.forEach(function (level, li) {
+    var g = document.createElementNS(SVG_NS, "g");
+    levelsGroup.appendChild(g);
+    EDGE_ORDER.forEach(function (pair) {
+      var a = project(level.s, pair[0][0], pair[0][1], pair[0][2]);
+      var b = project(level.s, pair[1][0], pair[1][1], pair[1][2]);
+      var line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("x1", a.x.toFixed(2)); line.setAttribute("y1", a.y.toFixed(2));
+      line.setAttribute("x2", b.x.toFixed(2)); line.setAttribute("y2", b.y.toFixed(2));
+      line.setAttribute("stroke-linecap", "round");
+      var len = Math.hypot(b.x - a.x, b.y - a.y);
+      line.setAttribute("stroke-dasharray", String(len));
+      line.setAttribute("stroke-dashoffset", String(len));
+      line.setAttribute("stroke", "var(--edge-dim)");
+      line.setAttribute("stroke-width", "1.5");
+      g.appendChild(line);
+      edges.push({ el: line, len: len, color: level.color, level: li });
+    });
+  });
+
+  // Bar spanning the outer cube's widest corners, below its lowest tip,
+  // hung on dashed extension lines like a blueprint dimension line.
+  var s0 = LEVELS[0].s;
+  var left = project(s0, -1, -1, 1), right = project(s0, 1, -1, -1);
+  var tip = project(s0, 1, -1, 1); // lowest vertex of the outer cube
+  var barY = tip.y + 16;
+  [["rnv-bar-drop-l", left], ["rnv-bar-drop-r", right]].forEach(function (d) {
+    var el = document.getElementById(d[0]);
+    el.setAttribute("x1", d[1].x); el.setAttribute("y1", d[1].y + 4);
+    el.setAttribute("x2", d[1].x); el.setAttribute("y2", barY + 4); // past the bar: extension-line tick
+  });
+  var track = document.getElementById("rnv-bar-track");
+  var value = document.getElementById("rnv-bar-value");
+  track.setAttribute("x1", left.x); track.setAttribute("y1", barY);
+  track.setAttribute("x2", right.x); track.setAttribute("y2", barY);
+  var barLen = right.x - left.x;
+  value.setAttribute("x1", left.x); value.setAttribute("y1", barY);
+  value.setAttribute("x2", right.x); value.setAttribute("y2", barY);
+  value.setAttribute("stroke-dasharray", String(barLen));
+  value.setAttribute("stroke-dashoffset", String(barLen));
+
+  /* ---------------- timeline: assemble -> hold -> disassemble ---------------- */
+
+  var ASSEMBLE_MS = 130;   // per edge
+  var DISASSEMBLE_MS = 95; // per edge
+  var HOLD_MS = 650;
+  var REST_MS = 350;
+  var N = edges.length;
+  var T1 = N * ASSEMBLE_MS, T2 = T1 + HOLD_MS, T3 = T2 + N * DISASSEMBLE_MS;
+  var TOTAL = T3 + REST_MS;
+  var HIGHLIGHT_W = "2.75";
+
+  function setEdge(edge, drawn, highlight) {
+    // drawn in [0,1]: how much of the edge is present.
+    edge.el.setAttribute("stroke-dashoffset", String(edge.len * (1 - drawn)));
+    if (highlight) {
+      edge.el.setAttribute("stroke", edge.color);
+      edge.el.setAttribute("stroke-width", HIGHLIGHT_W);
+      edge.el.setAttribute("filter", "url(#rnv-glow)");
+    } else {
+      edge.el.setAttribute("stroke", drawn > 0 ? "var(--edge-dim)" : "transparent");
+      edge.el.setAttribute("stroke-width", "1.5");
+      edge.el.removeAttribute("filter");
+    }
+  }
+
+  function setBar(fraction) {
+    value.setAttribute("stroke-dashoffset", String(barLen * (1 - Math.max(0, Math.min(1, fraction)))));
+  }
+
+  var rafId = 0, stopped = false;
+  function frame(now) {
+    if (stopped) return;
+    var t = now % TOTAL;
+    var i, k;
+    if (t < T1) {
+      // Recursive assembly: outer cube edge by edge, then the inner cubes.
+      k = t / ASSEMBLE_MS;
+      for (i = 0; i < N; i++) {
+        var d = k - i;
+        setEdge(edges[i], d <= 0 ? 0 : d >= 1 ? 1 : d, d > 0 && d < 1.6);
+      }
+      setBar(k / N);
+    } else if (t < T2) {
+      // Fully assembled: one glow pulse rippling through the recursion levels.
+      var pulse = (t - T1) / HOLD_MS;
+      for (i = 0; i < N; i++) {
+        var wave = Math.abs(pulse * (LEVELS.length + 1) - edges[i].level - 0.5);
+        setEdge(edges[i], 1, wave < 0.5);
+      }
+      setBar(1);
+    } else if (t < T3) {
+      // Recursive disassembly: innermost cube first, reverse edge order.
+      k = (t - T2) / DISASSEMBLE_MS;
+      for (i = 0; i < N; i++) {
+        var ri = N - 1 - i; // edges[ri] is the (i+1)-th to be removed
+        var u = k - i;
+        setEdge(edges[ri], u <= 0 ? 1 : u >= 1 ? 0 : 1 - u, u > 0 && u < 1.6);
+      }
+      setBar(1 - k / N);
+    } else {
+      for (i = 0; i < N; i++) setEdge(edges[i], 0, false);
+      setBar(0);
+    }
+    rafId = requestAnimationFrame(frame);
+  }
+
+  if (reduceMotion) {
+    // Static assembled cube + full bar; no continuous animation.
+    edges.forEach(function (e) { setEdge(e, 1, e.level === 0); });
+    setBar(1);
+  } else {
+    rafId = requestAnimationFrame(frame);
+  }
+
+  /* ---------------- status line + slow-load hint ---------------- */
+
+  var MESSAGES = [
+    "Preparing 3D workspace…",
+    "Loading offline bundle…",
+    "Parsing model runtimes…",
+    "Assembling floorplan viewer…",
+  ];
+  var msgIdx = 0;
+  var msgTimer = setInterval(function () {
+    msgIdx = (msgIdx + 1) % MESSAGES.length;
+    statusEl.textContent = MESSAGES[msgIdx];
+  }, 4200);
+  var hintTimer = setTimeout(function () { hintEl.classList.add("rnv-show"); }, 45000);
+
+  /* ---------------- hide when the floorplan viewer is visible ---------------- */
+
+  function floorplanVisible() {
+    var roots = [document.getElementById("root"), document.getElementById("renovisions-userscript-root")];
+    for (var r = 0; r < roots.length; r++) {
+      if (!roots[r]) continue;
+      var svgs = roots[r].querySelectorAll("svg");
+      for (var i = 0; i < svgs.length; i++) {
+        var box = svgs[i].getBoundingClientRect();
+        if (box.width >= 160 && box.height >= 160) return true; // the floorplan viewer
+      }
+    }
+    return false;
+  }
+
+  var hidden = false;
+  function hide() {
+    if (hidden) return;
+    hidden = true;
+    clearInterval(msgTimer);
+    clearTimeout(hintTimer);
+    clearInterval(pollTimer);
+    if (observer) observer.disconnect();
+    hintEl.classList.remove("rnv-show");
+    loader.classList.add("rnv-done");
+    setTimeout(function () {
+      stopped = true;
+      cancelAnimationFrame(rafId);
+      if (loader.parentNode) loader.parentNode.removeChild(loader);
+    }, 1100); // just past the fade transition
+  }
+
+  var checkQueued = false;
+  function queueCheck() {
+    if (hidden || checkQueued) return;
+    checkQueued = true;
+    requestAnimationFrame(function () {
+      checkQueued = false;
+      if (floorplanVisible()) hide();
+    });
+  }
+
+  var observer = new MutationObserver(queueCheck);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  var pollTimer = setInterval(queueCheck, 700); // safety net (e.g. CSS-only changes)
+  window.addEventListener("renovision:floorplan-visible", hide); // explicit app hook
+  window.RenovisionLoader = { hide: hide }; // manual escape hatch
+})();
+</script>
+</body>
+</html>
