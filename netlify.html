@@ -13,10 +13,10 @@
   @match-ed against. While Tampermonkey loads + parses the ~55 MB offline
   bundle in the background, an SVG "3D cube" loading indicator plays: three
   nested wireframe cubes are recursively assembled edge by edge (each edge
-  highlights as it is placed), then recursively disassembled, with a progress
-  bar built into the cube's base line. Once the application's main SVG
-  floorplan viewer becomes visible the loader fades away (scale + blur +
-  opacity) and removes itself.
+  highlights brightly as it is placed, on its own fast clock, independent of
+  the status messages), with a progress bar built into the cube's base line.
+  Once the application's main SVG floorplan viewer becomes visible the loader
+  fades away (scale + blur + opacity) and removes itself.
 
   Everything is inline (no external requests), so the page works from GitHub
   Pages, Netlify, or file:// alike. The userscript mounts into #root below.
@@ -106,6 +106,16 @@
         <feGaussianBlur stdDeviation="2.6" result="b" />
         <feMerge>
           <feMergeNode in="b" /><feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+      <!-- Hot double-halo glow for the ACTIVE edge: a wide soft bloom plus a
+           tight bright core, so the edge being placed clearly pops out. -->
+      <filter id="rnv-glow-hot" x="-140%" y="-140%" width="380%" height="380%">
+        <feGaussianBlur stdDeviation="5.5" result="wide" />
+        <feGaussianBlur stdDeviation="1.6" result="core" />
+        <feMerge>
+          <feMergeNode in="wide" /><feMergeNode in="wide" />
+          <feMergeNode in="core" /><feMergeNode in="SourceGraphic" />
         </feMerge>
       </filter>
       <linearGradient id="rnv-bar-fill" x1="0" y1="0" x2="1" y2="0">
@@ -211,18 +221,19 @@
   value.setAttribute("stroke-dasharray", String(barLen));
   value.setAttribute("stroke-dashoffset", String(barLen));
 
-  /* --------- one-edge-at-a-time build, stepped by status changes ---------
-     Each status-text change lights the NEXT single edge of the cube (bright
-     + glow); already-lit edges stay drawn but dim; a full lap (all N edges)
-     briefly holds the finished cube, then clears and starts the next lap.
-     The status text and the highlighted edge advance together on one timer,
-     so the cube visibly grows one edge per status beat. */
+  /* ---------------- one-edge-at-a-time build, on its own clock ----------------
+     A dedicated fast timer lights the NEXT single edge of the cube (bright,
+     hot double-halo glow); already-lit edges stay drawn but dim; a full lap
+     (all N edges) briefly holds the finished cube, then clears and starts the
+     next lap. The edge clock is DETACHED from the status messages: edges
+     advance 3x faster than the status cadence, which keeps its own timer. */
 
   var N = edges.length;
-  var STEP_MS = 1200;      // one status beat = one new edge
-  var HOLD_MS = 900;       // pause on the completed cube before clearing
-  var DRAW_MS = 460;       // how long the newly-lit edge takes to draw in
-  var HIGHLIGHT_W = "3";
+  var STEP_MS = 1200;      // status-message cadence (messages only)
+  var EDGE_MS = STEP_MS / 3; // one new edge — 3x the old status-coupled pace
+  var HOLD_MS = 600;       // pause on the completed cube before clearing
+  var DRAW_MS = 200;       // how long the newly-lit edge takes to draw in
+  var HIGHLIGHT_W = "4";
 
   function setEdge(edge, drawn, highlight) {
     // drawn in [0,1]: how much of the edge is present.
@@ -230,7 +241,7 @@
     if (highlight) {
       edge.el.setAttribute("stroke", edge.color);
       edge.el.setAttribute("stroke-width", HIGHLIGHT_W);
-      edge.el.setAttribute("filter", "url(#rnv-glow)");
+      edge.el.setAttribute("filter", "url(#rnv-glow-hot)");
     } else {
       edge.el.setAttribute("stroke", drawn > 0 ? "var(--edge-dim)" : "transparent");
       edge.el.setAttribute("stroke-width", "1.5");
@@ -276,7 +287,7 @@
           var pulse = t >= 1;                      // pulse once fully drawn
           setEdge(edges[i], t, true);              // the one active edge, bright
           if (pulse) {
-            var w = 2.6 + 0.9 * (0.5 + 0.5 * Math.sin(now * 0.009));
+            var w = 3.6 + 1.6 * (0.5 + 0.5 * Math.sin(now * 0.014));
             edges[i].el.setAttribute("stroke-width", w.toFixed(2));
           }
         } else {
@@ -308,13 +319,17 @@
     "Almost ready…",
   ];
   var msgIdx = 0;
-  // One timer drives both: advance the status text AND light the next edge.
+  // Two INDEPENDENT timers: the status text keeps its slow cadence while the
+  // cube edges light on their own 3x-faster clock (EDGE_MS).
   var msgTimer = setInterval(function () {
     if (reduceMotion) return;
     statusEl.textContent = MESSAGES[msgIdx % MESSAGES.length];
     msgIdx++;
-    advanceEdge(performance.now());
   }, STEP_MS);
+  var edgeTimer = setInterval(function () {
+    if (reduceMotion) return;
+    advanceEdge(performance.now());
+  }, EDGE_MS);
   // Light the first edge immediately so the cube starts building at once.
   if (!reduceMotion) { statusEl.textContent = MESSAGES[0]; msgIdx = 1; advanceEdge(performance.now()); }
   var hintTimer = setTimeout(function () { hintEl.classList.add("rnv-show"); }, 45000);
@@ -339,6 +354,7 @@
     if (hidden) return;
     hidden = true;
     clearInterval(msgTimer);
+    clearInterval(edgeTimer);
     clearTimeout(hintTimer);
     clearInterval(pollTimer);
     if (observer) observer.disconnect();
