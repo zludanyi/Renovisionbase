@@ -168,11 +168,14 @@
       y: CY + (x + z) * s * 0.5 - y * s * 1.04,
     };
   }
-  // 12 edges in assembly order: base ring, then pillars, then top ring.
+  // 11 edges in assembly order: base ring, then pillars, then top ring.
+  // The cube's REAR vertical edge — [[-1,-1,-1],[-1,1,-1]], the back edge a
+  // solid cube would occlude — is intentionally omitted so the frame reads as
+  // a solid-cube perspective rather than a see-through wireframe.
   var EDGE_ORDER = [
     [[-1,-1,-1],[ 1,-1,-1]], [[ 1,-1,-1],[ 1,-1, 1]],
     [[ 1,-1, 1],[-1,-1, 1]], [[-1,-1, 1],[-1,-1,-1]],
-    [[-1,-1,-1],[-1, 1,-1]], [[ 1,-1,-1],[ 1, 1,-1]],
+    [[ 1,-1,-1],[ 1, 1,-1]],
     [[ 1,-1, 1],[ 1, 1, 1]], [[-1,-1, 1],[-1, 1, 1]],
     [[-1, 1,-1],[ 1, 1,-1]], [[ 1, 1,-1],[ 1, 1, 1]],
     [[ 1, 1, 1],[-1, 1, 1]], [[-1, 1, 1],[-1, 1,-1]],
