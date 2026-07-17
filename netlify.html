@@ -168,15 +168,16 @@
       y: CY + (x + z) * s * 0.5 - y * s * 1.04,
     };
   }
-  // 11 edges in assembly order: base ring, then pillars, then top ring.
-  // The cube's REAR vertical edge — [[-1,-1,-1],[-1,1,-1]], the back edge a
-  // solid cube would occlude — is intentionally omitted so the frame reads as
-  // a solid-cube perspective rather than a see-through wireframe.
+  // 10 edges in assembly order: base ring, then side pillars, then top ring.
+  // BOTH central vertical pillars are omitted so no edge bisects the cube's
+  // centre in the solid-cube perspective:
+  //   - rear vertical  [[-1,-1,-1],[-1,1,-1]]  (the occluded back edge)
+  //   - front vertical [[ 1,-1, 1],[ 1,1, 1]]  (the centre spine the user saw)
+  // Only the left/right side pillars connect the top and bottom faces.
   var EDGE_ORDER = [
     [[-1,-1,-1],[ 1,-1,-1]], [[ 1,-1,-1],[ 1,-1, 1]],
     [[ 1,-1, 1],[-1,-1, 1]], [[-1,-1, 1],[-1,-1,-1]],
-    [[ 1,-1,-1],[ 1, 1,-1]],
-    [[ 1,-1, 1],[ 1, 1, 1]], [[-1,-1, 1],[-1, 1, 1]],
+    [[ 1,-1,-1],[ 1, 1,-1]], [[-1,-1, 1],[-1, 1, 1]],
     [[-1, 1,-1],[ 1, 1,-1]], [[ 1, 1,-1],[ 1, 1, 1]],
     [[ 1, 1, 1],[-1, 1, 1]], [[-1, 1, 1],[-1, 1,-1]],
   ];
