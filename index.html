@@ -231,9 +231,9 @@
 
   var N = edges.length;
   var STEP_MS = 1200;      // status-message cadence (messages only)
-  var EDGE_MS = 110;       // one new edge — the highlight races edge to edge
+  var EDGE_MS = 50;        // one new edge — all 36 edges spin by in < 2 s
   var HOLD_MS = 350;       // pause on the completed cube before clearing
-  var DRAW_MS = 80;        // how long the newly-lit edge takes to draw in
+  var DRAW_MS = 40;        // how long the newly-lit edge takes to draw in
   var HIGHLIGHT_W = "4";
 
   function setEdge(edge, drawn, highlight) {
