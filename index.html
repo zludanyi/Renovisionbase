@@ -25,7 +25,7 @@
   :root {
     --bg0: #0b1520;
     --bg1: #0e1d2e;
-    --edge-dim: rgba(148, 163, 184, 0.28);
+    --edge-dim: rgba(148, 163, 184, 0.12);
     --bar-track: rgba(148, 163, 184, 0.28);
     --ink: #cbd5e1;
     --ink-dim: #64748b;
@@ -231,10 +231,10 @@
 
   var N = edges.length;
   var STEP_MS = 1200;      // status-message cadence (messages only)
-  var EDGE_MS = 50;        // one new edge — all 36 edges spin by in < 2 s
-  var HOLD_MS = 350;       // pause on the completed cube before clearing
-  var DRAW_MS = 40;        // how long the newly-lit edge takes to draw in
-  var HIGHLIGHT_W = "4";
+  var EDGE_MS = 25;        // one new edge — all 36 edges spin by in < 1 s (0.9 s)
+  var HOLD_MS = 150;       // pause on the completed cube before clearing
+  var DRAW_MS = 18;        // how long the newly-lit edge takes to draw in
+  var HIGHLIGHT_W = "5.5"; // bright active edge — big contrast vs dim built ones
 
   function setEdge(edge, drawn, highlight) {
     // drawn in [0,1]: how much of the edge is present.
@@ -245,7 +245,7 @@
       edge.el.setAttribute("filter", "url(#rnv-glow-hot)");
     } else {
       edge.el.setAttribute("stroke", drawn > 0 ? "var(--edge-dim)" : "transparent");
-      edge.el.setAttribute("stroke-width", "1.5");
+      edge.el.setAttribute("stroke-width", "1");
       edge.el.removeAttribute("filter");
     }
   }
@@ -288,7 +288,7 @@
           var pulse = t >= 1;                      // pulse once fully drawn
           setEdge(edges[i], t, true);              // the one active edge, bright
           if (pulse) {
-            var w = 3.6 + 1.6 * (0.5 + 0.5 * Math.sin(now * 0.014));
+            var w = 5.0 + 2.4 * (0.5 + 0.5 * Math.sin(now * 0.02));
             edges[i].el.setAttribute("stroke-width", w.toFixed(2));
           }
         } else {
